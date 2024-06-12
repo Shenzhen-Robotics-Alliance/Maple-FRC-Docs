@@ -34,40 +34,35 @@ under frc.robot.Utils.Tests, create a new class named `ChassisHeadingPIDControll
 package frc.robot.Utils.Tests;
 
 public class ChassisHeadingPIDControllerTest implements SimpleRobotTest {
-    @Override
-    public void testStart() {
+	@Override
+	public void testStart() {
+	
+	}
 
-    }
+	@Override
+  public void testPeriodic() {
 
-    @Override
-    public void testPeriodic() {
-
-    }
+  }
 }
 ```
 
 Now let’s declare a chassis module and a gyro
 
 ```java
-private ChassisModule chassis;
-private SimpleGyro gyro = new SimpleGyro(0, true, new NavX2IMU());
-
-@Override
-public void testStart() {
-	final Motor
-		left = new MotorsSet(new Motor[] {
-	    new TalonSRXMotor(new TalonSRX(3), false), 
-	    new TalonSRXMotor(new TalonSRX(4), false
-	  }),
-    right = new MotorsSet(new Motor[] {
-		  new TalonSRXMotor(new TalonSRX(1), true), 
-		  new TalonSRXMotor(new TalonSRX(2), true)
-		});
-	chassis = new ChassisModule(left, right);
-	chassis.init();
-	chassis.enable();
-	gyro.reset();
-}
+	private final ChassisModule chassis;
+	private final SimpleGyro gyro;
+	public ChassisHeadingPIDControllerTest(ChassisModule chassis, SimpleGyro gyro) {
+		this.chassis = chassis;
+		this.gyro = gyro;
+	}
+	
+	@Override
+	public void testStart() {
+		chassis.init();
+		chassis.reset();
+	  chassis.enable();
+	  gyro.reset();
+	}
 ```
 
 Next, create an EasyPIDController instance with its profile, it takes the following params:
@@ -79,35 +74,38 @@ Next, create an EasyPIDController instance with its profile, it takes the follow
 - `*errorAsMechanismInPlace` the amount of error that the mechanism accepts and thinks that the mechanism is in place when calling the method `controller.*isMechanismInPosition()`
 
 ```java
-private final EasyPIDController controller = new EasyPIDController(
-	new EasyPIDController.EasyPIDProfile(
-		0.7, // limit the chassis motor power to 70%
-	  Math.toRadians(90), // the chassis starts slowing down when the error is smaller than 90 degrees
-	  0.05, // to move the chassis, it takes at least 5% the motor power
-	  Math.toRadians(2), // if the error is within 2 degrees, we ignore it
-	  Math.toRadians(5), // if the error is wihtin 5 degrees, we think the chassis is in position
-	  0.3, // the chassis needs 0.3 seconds to slow down
-	  true // when the robot turns 360 degrees, it goes back to 0 degrees.  we call this "in cycle"
-	), 0 // the chassis starts at zero degrees
-);
+	private final EasyPIDController controller = new EasyPIDController(
+		new EasyPIDController.EasyPIDProfile(
+			0.7, // limit the chassis motor power to 70%
+		  Math.toRadians(60), // the chassis starts slowing down when the error is smaller than 90 degrees
+		  0.05, // to move the chassis, it takes at least 5% the motor power
+		  Math.toRadians(2), // if the error is within 2 degrees, we ignore it
+		  Math.toRadians(5), // if the error is wihtin 5 degrees, we think the chassis is in position
+		  0.3, // the chassis needs 0.3 seconds to slow down
+		  true // when the robot turns 360 degrees, it goes back to 0 degrees.  we call this "in cycle"
+		), 0 // the chassis starts at zero degrees
+	);
 ```
 
 Now let’s test our controller
 
 ```java
-/* use gamepad at port 1 to control */
-private final XboxController xboxController = new XboxController(1);
-
-@Override
-public void testPeriodic() {
-	/* we will try make the chassis stay at its starting rotation */
-	controller.setDesiredPosition(0);
-	/* if button A is pressed, send the controller's output to chassis as rotating power */
-	if (xboxController.getAButton())
-		chassis.setTurn(controller.getMotorPower(gyro.getYawVelocity(), gyro.getYawVelocity()), null);
-	/* otherwise, we use the controller's righter stick to control the rotation manually */
-	else
-		chassis.setTurn(-xboxController.getRightX(), null);
-	chassis.periodic();
-}
+	/* use gamepad at port 1 to control */
+	private final XboxController xboxController = new XboxController(1);
+	
+	@Override
+	public void testPeriodic() {
+		/* we will try make the chassis stay at its starting rotation */
+		controller.setDesiredPosition(0);
+		/* if button A is pressed, send the controller's output to chassis as rotating power */
+		if (xboxController.getAButton())
+			chassis.setTurn(
+				/* feed the gyro's data to the PID controller */
+				controller.getMotorPower(gyro.getYawVelocity(), gyro.getYaw())
+			, null);
+		/* otherwise, we use the controller's righter stick to control the rotation manually */
+		else
+			chassis.setTurn(-xboxController.getRightX(), null);
+		chassis.periodic();
+	}
 ```
