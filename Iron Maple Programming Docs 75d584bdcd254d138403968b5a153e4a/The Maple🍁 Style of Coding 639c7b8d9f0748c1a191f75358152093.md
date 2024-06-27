@@ -100,3 +100,210 @@ public class ShootingService extends RobotServiceBase {
 - **Services** Code that controls the operation logic of a function on the drivers’ gamepad.  All the classes here inherits `RobotServiceBase`, which inherits `RobotModuleOperatorMarker` .  This layer of code is the link between the pilot and the **Modules**, it reads input from the drivers’ gamepad and calls to the APIs in the Modules by: `raiseArm(this)` .
 
 ## Never-Nester
+
+Let’s take a look at too pieces of codes:
+
+```java
+private void readWheelConfigurationXMLFile(String filePath) {
+  try {
+    // Read each wheel calibration
+    String[] wheels = {"frontLeft", "frontRight", "backLeft", "backRight"};
+    for (String wheel : wheels) {
+	    NodeList nodeList = rootElement.getElementsByTagName(wheel);
+	    if (nodeList.getLength() > 0) {
+		    Node wheelNode = nodeList.item(0);
+		    if (wheelNode.getNodeType() == Node.ELEMENT_NODE) {
+			    Element wheelElement = (Element) wheelNode;
+				  Map<String, String> configMap = new HashMap<>();
+			    NodeList configNodes = wheelElement.getChildNodes();
+			    for (int i = 0; i < configNodes.getLength(); i++) {
+				    Node configNode = configNodes.item(i);
+				    if (configNode.getNodeType() == Node.ELEMENT_NODE) {
+					    Element configElement = (Element) configNode;
+						  configMap.put(
+							  configElement.getTagName(), 
+							  configElement.getTextContent()
+							);
+						}
+					}
+					calibrationData.put(wheel, configMap);
+				}
+			}
+		}
+	} catch (Exception e) {
+		e.printStackTrace();
+	}
+}
+```
+
+It looks nasty, how do we fix it?
+
+> **Trick2**: extract long for loop body to a separate method
+> 
+
+```java
+private void readWheelsConfigurationFromXMLFile(String filePath) {
+  try {
+    // Read each wheel calibration
+    String[] wheels = {"frontLeft", "frontRight", "backLeft", "backRight"};
+    for (String wheel : wheels) 
+	    readWheelConfig(wheel)
+	} catch (Exception e) {
+		e.printStackTrace();
+	}
+}
+
+private void readSingleWheelConfigs(String wheelName) {
+	NodeList nodeList = rootElement.getElementsByTagName(wheel);
+	if (nodeList.getLength() > 0) {
+		Node wheelNode = nodeList.item(0);
+		if (wheelNode.getNodeType() == Node.ELEMENT_NODE) {
+			Element wheelElement = (Element) wheelNode;
+			Map<String, String> configMap = new HashMap<>();
+			NodeList configNodes = wheelElement.getChildNodes();
+			for (int i = 0; i < configNodes.getLength(); i++) {
+				Node configNode = configNodes.item(i);
+				if (configNode.getNodeType() == Node.ELEMENT_NODE) {
+					Element configElement = (Element) configNode;
+					configMap.put(configElement.getTagName(), configElement.getTextContent());
+				}
+			}
+			calibrationData.put(wheel, configMap);
+		}
+	}
+}
+```
+
+> **Trick 2**: process special situations first
+> 
+
+```java
+/** 
+* reads the configuration of a single wheel
+* @param wheelName the name of the wheel
+*/
+private void readSingleWheelConfigs(String wheelName) {
+	NodeList nodeList = rootElement.getElementsByTagName(wheel);
+	if (nodeList.isEmpty())
+		return; // skit the rest of the code
+	final Node wheelNode = nodeList.item(0);
+	if (wheelNode.getNodeType() != Node.ELEMENT_NODE)
+		return; // skip the rest of the code
+	
+	final Element wheelElement = (Element) wheelNode;
+	Map<String, String> configMap = new HashMap<>();
+	NodeList configNodes = wheelElement.getChildNodes();
+	for (int i = 0; i < configNodes.getLength(); i++) {
+		Node configNode = configNodes.item(i);
+		if (configNode.getNodeType() == Node.ELEMENT_NODE) {
+			Element configElement = (Element) configNode;
+			configMap.put(configElement.getTagName(), configElement.getTextContent());
+		}
+	}
+	calibrationData.put(wheel, configMap);
+}
+```
+
+(Repeat Trick 1 and 2 again)
+
+```java
+/** 
+* reads the configuration of a single wheel
+* @param wheelName the name of the wheel
+*/
+private void readSingleWheelConfigs(String wheelName) {
+	...
+	final Element wheelElement = (Element) wheelNode;
+	Map<String, String> configMap = new HashMap<>();
+	NodeList configNodes = wheelElement.getChildNodes();
+	for (Node configNode:configNodes) 
+		addConfigToMap(configNode, configMap);
+	calibrationData.put(wheel, configMap);
+}
+
+private void addConfigToMap(Node configNode, Map<String, String> configMap) {
+	if (configNode.getNodeType() != Node.ELEMENT_NODE) return; // skip the rest
+	final Element configElement = (Element) configNode;
+	configMap.put(configElement.getTagName(), configElement.getTextContent());
+}
+```
+
+Let’s compare the two code
+
+<aside>
+😩 Before
+
+</aside>
+
+```java
+private void readWheelConfigurationXMLFile(String filePath) {
+  try {
+    // Read each wheel calibration
+    String[] wheels = {"frontLeft", "frontRight", "backLeft", "backRight"};
+    for (String wheel : wheels) {
+	    NodeList nodeList = rootElement.getElementsByTagName(wheel);
+	    if (nodeList.getLength() > 0) {
+		    Node wheelNode = nodeList.item(0);
+		    if (wheelNode.getNodeType() == Node.ELEMENT_NODE) {
+			    Element wheelElement = (Element) wheelNode;
+				  Map<String, String> configMap = new HashMap<>();
+			    NodeList configNodes = wheelElement.getChildNodes();
+			    for (int i = 0; i < configNodes.getLength(); i++) {
+				    Node configNode = configNodes.item(i);
+				    if (configNode.getNodeType() == Node.ELEMENT_NODE) {
+					    Element configElement = (Element) configNode;
+						  configMap.put(
+							  configElement.getTagName(), 
+							  configElement.getTextContent()
+							);
+						}
+					}
+					calibrationData.put(wheel, configMap);
+				}
+			}
+		}
+	} catch (Exception e) {
+		e.printStackTrace();
+	}
+}
+```
+
+<aside>
+😀 After
+
+</aside>
+
+```java
+private void readWheelsConfigurationFromXMLFile(String filePath) {
+  try {
+    // Read each wheel calibration
+    String[] wheels = {"frontLeft", "frontRight", "backLeft", "backRight"};
+    for (String wheel : wheels) 
+	    readWheelConfig(wheel)
+	} catch (Exception e) {
+		e.printStackTrace();
+	}
+}
+
+private void readSingleWheelConfigs(String wheelName) {
+	NodeList nodeList = rootElement.getElementsByTagName(wheel);
+	if (nodeList.isEmpty()) return;
+	
+	final Node wheelNode = nodeList.item(0);
+	if (wheelNode.getNodeType() != Node.ELEMENT_NODE) return;
+	
+	final Element wheelElement = (Element) wheelNode;
+	Map<String, String> configMap = new HashMap<>();
+	NodeList configNodes = wheelElement.getChildNodes();
+	for (Node configNode:configNodes) 
+		addConfigToMap(configNode, configMap);
+	
+	calibrationData.put(wheel, configMap);
+}
+
+private void addConfigToMap(Node configNode, Map<String, String> configMap) {
+	if (configNode.getNodeType() != Node.ELEMENT_NODE) return;
+	final Element configElement = (Element) configNode;
+	configMap.put(configElement.getTagName(), configElement.getTextContent());
+}
+```
